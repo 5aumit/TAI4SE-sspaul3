@@ -1,0 +1,8 @@
+file,repository,path_in_repository,repository_url,software_heritage
+test_background.py,timeflux/timeflux,/test/helpers/test_background.py,https://github.com/timeflux/timeflux,https://archive.softwareheritage.org/browse/content/sha1:d2e46944ab05c5e8c1979101728b7b25900be342/
+test_detector.py,TiankangXie/feat,/feat/tests/test_detector.py,https://github.com/TiankangXie/feat,https://archive.softwareheritage.org/browse/content/sha1:753bdbf080e7a8652c39e40beeae51f74382d606/
+test_exceptions.py,lemon24/reader,/tests/test_exceptions.py,https://github.com/lemon24/reader,https://archive.softwareheritage.org/browse/content/sha1:6fd4df7370de2343fe7723a2d8f5aacffa333835/
+test_node_sep.py,c0fec0de/anytree,/tests/test_node_sep.py,https://github.com/c0fec0de/anytree,https://archive.softwareheritage.org/browse/content/sha1:a430b4629ee06dbfb267f839599383624e37451e/
+tree_printer.py,werkaaa/theory_of_compiling,/src/interpreter/tree_printer.py,https://github.com/werkaaa/theory_of_compiling,https://archive.softwareheritage.org/browse/content/sha1:1084478226777b9259274e053984ac34d461198d/
+update.py,dahool/big-brother-bot,/b3/update.py,https://github.com/dahool/big-brother-bot,https://archive.softwareheritage.org/browse/content/sha1:903d5913025d7d61ed50285785ec7f683047b49a/
+watch.py,neuroticnerd/machop,/machop/watch.py,https://github.com/neuroticnerd/machop,https://archive.softwareheritage.org/browse/content/sha1:4e30f0a9b420123c28858aad2a71040dcc952829/
