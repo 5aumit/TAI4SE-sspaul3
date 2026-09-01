@@ -85,5 +85,14 @@ not the final report.
   threshold.
 - It skipped 29 files that could not be tokenized. These are excluded from
   comparisons and should be reported as a limitation of this duplication run.
-- Next: manually inspect a small, representative set of the 1,808 pairs and
-  select at most 20 defensible candidates for the final submission.
+- `scripts/review_candidates.py export` sorts pairs by descending score and
+  creates a Markdown review file with a checkbox for each pair. The reviewer
+  selects pairs by changing `[ ]` to `[x]`.
+- `scripts/review_candidates.py build` turns checked pairs into two individual
+  `candidates.jsonl` records per pair. It rejects more than 10 pairs, so the
+  output cannot exceed the assignment limit of 20 records.
+- On 2026-09-01, `scripts/review_candidates.py export --sample sample --output
+  sample/review.md --count 15` produced a ranked 15-pair review file. It is
+  ignored with the raw sample data and can be regenerated from the scripts.
+- Manual review selected six pairs (IDs 001, 002, 005, 006, 009, and 010).
+  The candidate builder therefore produced 12 individual candidate records.
