@@ -1,0 +1,200 @@
+[
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/71",
+    "category": "type_handling",
+    "confidence": "high",
+    "observation": "int(gap / 1.3) becomes gap // 1.3; the resulting float is passed to range().",
+    "interpretation": "The algorithm is retained, but numeric type information is lost during regeneration."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/111",
+    "category": "generation_error",
+    "confidence": "high",
+    "observation": "The description requests intersection across nested lists; regenerated code intersects with set(flat_list[0]), where flat_list[0] is an integer.",
+    "interpretation": "The description retains the intent, but regenerated code uses an invalid operation on an element."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/61",
+    "category": "generation_error",
+    "confidence": "high",
+    "observation": "The description says sum of digits; regenerated code compares int(substring) with its length.",
+    "interpretation": "The model fails to implement its own still-correct description."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/94",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The last description replaces the first tuple value with the index of the minimum-second-value tuple. Regenerated code returns an index.",
+    "interpretation": "The description changes the required output, and the next implementation follows that change."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/57",
+    "category": "syntax_error",
+    "confidence": "high",
+    "observation": "The regenerated return expression is missing a closing parenthesis.",
+    "interpretation": "Functional failure occurs despite a description that preserves the digit-concatenation task."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/139",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The description turns scalar radius into INPUTS[0]; regenerated code indexes the scalar argument.",
+    "interpretation": "The representation changes the argument contract despite retaining an example assertion."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/277",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The description invents a negative-threshold rule; regenerated code returns an empty dictionary for n < 0. Base tests pass and plus tests fail.",
+    "interpretation": "Added edge-case statements can introduce incorrect requirements. Extended tests expose the change."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/64",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The passing code sorts ascending; the description says descending and the next code adds reverse=True.",
+    "interpretation": "Pseudocode can reverse a requirement even when the original assertion remains visible."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/141",
+    "category": "generation_error",
+    "confidence": "high",
+    "observation": "The description retains ascending pancake sort; regenerated code searches suffixes while applying prefix flips.",
+    "interpretation": "The algorithm is regenerated incorrectly; the observed code fails tests."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/422",
+    "category": "generation_error",
+    "confidence": "high",
+    "observation": "The description retains find_Average_Of_Cube; regenerated code defines find_average_of_cube and rewrites its example to use the new name.",
+    "interpretation": "The function interface drifts during generation. Keeping the original assertion in the prompt does not enforce compliance."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "standard",
+    "task_id": "Mbpp/71",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The description introduces Quick Sort as a new request; regenerated code defines quick_sort instead of comb_sort.",
+    "interpretation": "A summary can become a new instruction and cause an interface failure."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "standard",
+    "task_id": "Mbpp/61",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The description drops the comparison with substring length; the next code compares digit sum with int(substring).",
+    "interpretation": "The requirement changes before regeneration."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "standard",
+    "task_id": "Mbpp/111",
+    "category": "generation_error",
+    "confidence": "high",
+    "observation": "The description still asks for common elements; the next implementation intersects a union of all items with that same union.",
+    "interpretation": "The implementation returns all distinct items rather than their intersection across lists."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "standard",
+    "task_id": "Mbpp/141",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The description changes ascending sorting into descending sorting; regenerated code also changes the flip logic.",
+    "interpretation": "Task meaning has already changed before the failing generation; code-level defects may also contribute."
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "loop": "standard",
+    "task_id": "Mbpp/57",
+    "category": "syntax_error",
+    "confidence": "high",
+    "observation": "The regenerated return expression is missing a closing parenthesis.",
+    "interpretation": "The same syntax defect also occurs in the pseudocode configuration for this task."
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "loop": "standard",
+    "task_id": "Mbpp/11",
+    "category": "generation_error",
+    "confidence": "high",
+    "observation": "The description retains removal of first and last occurrences; regenerated code removes twice even when only one occurrence exists. Base passes; plus fails.",
+    "interpretation": "The original requirement is retained, but the regenerated boundary-case handling is wrong."
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "loop": "standard",
+    "task_id": "Mbpp/58",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The description changes sign comparison into boolean negation; code uses not a and not b.",
+    "interpretation": "The description substitutes truthiness for sign and the next code follows the wrong operation."
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "loop": "standard",
+    "task_id": "Mbpp/170",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "The description omits that the range is defined by indices; regenerated code filters values between start and end.",
+    "interpretation": "Removing the index interpretation changes the task from a slice sum into value filtering."
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "loop": "standard",
+    "task_id": "Mbpp/583",
+    "category": "generation_error",
+    "confidence": "high",
+    "observation": "The description retains nth Catalan number; regenerated code assigns catalan[1] even when n is zero. Base passes; plus fails.",
+    "interpretation": "A faithful task description can still produce a boundary-case implementation failure."
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "loop": "standard",
+    "task_id": "Mbpp/763",
+    "category": "representation_drift",
+    "confidence": "high",
+    "observation": "Passing code sorts its input; the description instead refers to an already sorted array, and the next code omits sorting.",
+    "interpretation": "An implementation step is transformed into an assumed precondition."
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/7",
+    "category": "initial_coverage_gap",
+    "confidence": "limited",
+    "observation": "The initial code uses whitespace splitting and a length >= 4 filter. Base tests pass and plus tests fail.",
+    "interpretation": "This is not loop-induced drift. The saved records do not identify the failing extended input, so the exact cause remains unresolved."
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "loop": "pseudocode",
+    "task_id": "Mbpp/99",
+    "category": "initial_coverage_gap",
+    "confidence": "limited",
+    "observation": "The initial code returns bin(n)[2:]. Base tests pass and plus tests fail.",
+    "interpretation": "This is not loop-induced drift. Negative-input handling is a candidate issue, but the exact failing input is not saved."
+  }
+]

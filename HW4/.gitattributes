@@ -1,0 +1,9 @@
+# Preserve the exact bytes covered by submission/MANIFEST.sha256.
+submission/** -text
+
+# Patch context whitespace and CSV CRLF are part of these file formats.
+*.patch -text whitespace=-blank-at-eol
+*.csv -text whitespace=cr-at-eol
+
+# The worksheet includes verbatim model outputs as inspection evidence.
+submission/analysis/failure_review.md whitespace=-blank-at-eol

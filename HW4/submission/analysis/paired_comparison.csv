@@ -1,0 +1,3 @@
+model,shared_initially_solved,pseudocode_better,tie,pseudocode_worse,mean_survival_change
+meta-llama/llama-3.1-8b-instruct,224,57,131,36,0.9375
+qwen/qwen3.7-flash,284,32,252,0,0.8415492957746479

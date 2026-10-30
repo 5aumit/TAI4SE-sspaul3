@@ -1,0 +1,12 @@
+# Source is published separately in the public EvaLooop fork.
+/EvaLooop/
+
+# Local credentials.
+.env
+.env.*
+!.env.example
+
+# Supplied course materials are not part of our public submission history.
+/assignment4-data.zip
+/assignment2-data/
+/Instruction.docx

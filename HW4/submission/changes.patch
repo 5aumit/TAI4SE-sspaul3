@@ -1,0 +1,1448 @@
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..da5d910
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,11 @@
++**
++!Dockerfile
++!pyproject.toml
++!README.md
++!run_hw4.py
++!analyze_hw4.py
++!constraints-hw4.txt
++!evaloop/
++!evaloop/**
++**/__pycache__/
++**/*.pyc
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 0000000..23e5948
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,15 @@
++FROM python:3.11-slim
++
++ENV PYTHONUNBUFFERED=1 MPLBACKEND=Agg
++WORKDIR /app
++
++# Install only API, evaluation, and analysis dependencies. No GPU runtime.
++COPY constraints-hw4.txt ./
++RUN pip install --no-cache-dir -c constraints-hw4.txt openai python-dotenv fire evalplus==0.3.1 pandas matplotlib seaborn pyyaml
++COPY pyproject.toml README.md ./
++COPY evaloop ./evaloop
++RUN pip install --no-deps .
++COPY run_hw4.py analyze_hw4.py ./
++RUN python run_hw4.py --check
++
++ENTRYPOINT ["python", "/app/run_hw4.py"]
+diff --git a/README.md b/README.md
+index d0200b5..f73c3b9 100644
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,10 @@
+ # EvaLooop: LLM Robustness Evaluation Framework
+ 
++CSC 591 HW4 extension: [public fork](https://github.com/5aumit/EvaLooop/tree/hw4-pseudocode).
++The extension is based on upstream commit `ce22fe2f80c8f36da85cc8a0cca49c2bcc8b1cb9`.
++`constraints-hw4.txt` records the API experiment's installed dependency versions.
++The Docker image uses these versions and does not install the unused GPU runtime.
++
+ [![arXiv](https://img.shields.io/badge/arXiv-2505.12185-b31b1b.svg)](https://arxiv.org/abs/2505.12185)
+ [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+ [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+@@ -50,6 +55,205 @@ evaloop analyze --results_path "results/experiment_results.json" \
+                 --judge_api_key_file api.key
+ ```
+ 
++### Run the full HW4 comparison with Docker
++
++From this repository directory, with `OPENROUTER_API_KEY` in `../.env`:
++
++```bash
++docker compose build
++docker compose run --rm benchmark
++```
++
++The second command starts paid API calls and runs generated code inside the
++container. It evaluates all 378 MBPP Plus tasks using both
++`meta-llama/llama-3.1-8b-instruct` and `qwen/qwen3.7-flash`, each with the standard
++and pseudocode loops. Settings are temperature 0, top-p 1, 10 cycles, 1024 maximum
++new tokens, and four simultaneous API requests per run. The four configurations
++run sequentially. No GPU is required.
++
++Both Qwen configurations explicitly disable reasoning with OpenRouter's
++`reasoning: {enabled: false}` request option. A diagnostic with default reasoning
++used all 1024 output tokens for reasoning and returned no answer text. The
++explicit setting reserves that limit for answer generation and is recorded as
++`reasoning_enabled` in results. Llama keeps its default behavior. For manual CLI
++runs, use `--reasoning_enabled=False` with `--provider openrouter`.
++
++`run_hw4.py` contains the model IDs and settings. `Dockerfile` installs the API,
++testing, and analysis dependencies. `compose.yaml` loads the key at runtime and
++mounts only `./results`; `.dockerignore` excludes credentials and other local
++files from the image build.
++
++Results, per-run logs, analysis plots, and `summary.csv` appear in `results/`.
++Analysis reports `ASL_pow` as `asl_score`, matching the supplied package's
++`aslScore`, without calling a similarity judge.
++
++To check imports without paid calls:
++
++```bash
++docker compose run --rm benchmark --check
++```
++
++Press Ctrl+C to stop. Each configuration saves its JSON only when it finishes;
++an interrupted configuration cannot resume. The runner refuses to overwrite
++existing results. To start a separate comparison, use an empty subdirectory:
++
++```bash
++docker compose run --rm benchmark --output-dir /results/another-run
++```
++
++To run individual configurations in separate containers, select one model and
++loop and give each container a separate output directory. For example:
++
++```bash
++docker compose run -d --rm --name hw4-qwen-pseudocode benchmark \
++  --models qwen/qwen3.7-flash --loops pseudocode \
++  --output-dir /results/parallel/qwen-pseudocode
++```
++
++Each container uses up to four API requests, four CPUs, and 4 GB of memory.
++Do not also schedule those configurations in the default four-run launcher.
++
++### Reproduce the completed analysis without API calls
++
++The submission ZIP contains the four completed results files, `failure_annotations.json`,
++and a top-level `summary.csv`. The supplied course data and aborted runs are excluded.
++`analyze_hw4.py` validates identical task sets, stop rules, assertion preservation,
++and the Qwen reasoning setting before recomputing the numbers.
++
++From an unpacked submission directory containing `results/` and the analysis script:
++
++```bash
++python analyze_hw4.py --results-dir results --output-dir reproduced-analysis \
++  --annotations failure_annotations.json
++```
++
++Alternatively, build the fork's Docker image and run its analysis entry point with
++an unpacked submission mounted at `/submission`. This needs no API key or network:
++
++```bash
++docker run --rm --network none --entrypoint python \
++  --mount "type=bind,source=$PWD,target=/submission" hw4-eval \
++  /app/analyze_hw4.py --results-dir /submission/results \
++  --output-dir /submission/reproduced-analysis \
++  --annotations /submission/failure_annotations.json
++```
++
++The output includes `summary.csv`, `metrics.json`, `survival.csv`,
++`paired_comparison.csv`, `survival_comparison.png`, `survival_comparison.pdf`,
++and the traceable failure-review worksheet. The labels in the annotation file
++are AI-assisted static code-reading notes for author review, not outputs of an
++independent judge. No semantic-similarity judge was used in the reported scores.
++
++### OpenRouter
++
++Use `--provider openrouter` to send evaluations through OpenRouter instead of
++selecting a local model from its name. Keep the full OpenRouter model ID.
++
++Store `OPENROUTER_API_KEY` in your environment or `.env`. The command searches
++for `.env` from the working directory through its parents. Exported variables
++take priority over file values. To select a specific file, use `--env_file`.
++
++From the repository directory, with credentials in `../.env`:
++
++```bash
++evaloop evaluate --provider openrouter --model "qwen/qwen-2.5-coder-32b-instruct" \
++                --env_file ../.env --temperature 0 --max_cycles 10 \
++                --max_new_tokens 1024
++```
++
++This command performs a paid evaluation and executes generated code. Run it in
++a restricted environment, as required for all evaluations. Model availability
++depends on your OpenRouter account.
++
++Changes to the existing framework: `evaloop/cli.py` exposes the provider and
++environment-file options. `evaloop/core/config.py` loads credentials and selects
++the existing OpenAI-compatible client with OpenRouter's endpoint. OpenRouter
++uses `max_new_tokens` for the response limit. Both dependency lists now include
++`python-dotenv`. The standard loop, tests, and metrics are unchanged.
++
++### Parallel API requests
++
++Use `--api_concurrency 4` to send up to four requests at once per model.
++The default is 1. The limit must be a positive integer. For example:
++
++```bash
++evaloop evaluate --provider openrouter --model "meta-llama/llama-3.1-8b-instruct" \
++                --env_file ../.env --loop_type pseudocode --api_concurrency 4 \
++                --temperature 0 --max_cycles 10 --max_new_tokens 1024
++```
++
++This is a paid full-dataset run. Parallelism reduces waiting time, not token
++cost. Each batch runs independent requests in a thread pool and returns results
++in prompt order. The cycle runner generates code across tasks, then descriptions,
++then tests the code. Later cycles only include passing tasks. Requests retain
++the existing per-request retries and error handling. The limit is per model;
++separate evaluation processes each have their own limit.
++
++`evaloop/models/closed_source.py` implements parallel requests.
++`evaloop/core/config.py` and `evaloop/cli.py` expose the limit.
++`evaloop/models/factory.py` now imports local-model libraries only when selecting
++a local model. API models do not require a GPU or vLLM at runtime; functional
++testing still needs a restricted CPU environment. The package's existing full
++dependency list still includes local-model packages.
++
++### Pseudocode loop (HW4 extension)
++
++Research question: does structured pseudocode preserve task behavior across
++cycles better than prose summaries?
++
++Select `--loop_type standard` (the default) or `--loop_type pseudocode`:
++
++```text
++standard:   original task -> Python code -> prose summary -> Python code -> ...
++pseudocode: original task -> Python code -> pseudocode    -> Python code -> ...
++```
++
++Both loops use the same first generation prompt, model, original MBPP Plus
++tests, and assertion wrapper. Only the code-to-description prompt changes.
++The exact extension prompt is `PSEUDOCODE_PROMPT` in
++`evaloop/tasks/code_to_pseudocode.py`. It requests FUNCTION, INPUTS, OUTPUT,
++STEPS, and END FUNCTION, with plain-English steps that preserve actual behavior.
++The same model performs both steps, with a fresh context for each call.
++
++The full pseudocode response is stripped of surrounding whitespace and wrapped
++with the original example assertion. No judge, repair model, or external
++perturbation is introduced. Formatting is requested but not enforced: malformed
++responses remain in the saved records for failure analysis. The function name
++and calling pattern remain anchored by the same assertion used by the standard
++loop. Both original and extended tests must pass to continue. Testing failure
++stops the task, or the task completes after the configured cycle limit. The
++current runner produces the description before testing but only carries it
++into another cycle when tests pass.
++
++To compare the configurations, run each with the same model and settings in a
++restricted environment. From the repository directory:
++
++```bash
++evaloop evaluate --provider openrouter --model "qwen/qwen-2.5-coder-32b-instruct" \
++                --env_file ../.env --loop_type standard --temperature 0 \
++                --max_cycles 10 --max_new_tokens 1024 --experiment_name comparison
++evaloop evaluate --provider openrouter --model "qwen/qwen-2.5-coder-32b-instruct" \
++                --env_file ../.env --loop_type pseudocode --temperature 0 \
++                --max_cycles 10 --max_new_tokens 1024 --experiment_name comparison
++```
++
++These commands run the full MBPP Plus dataset and incur API costs. Results
++include `loop_type`; filenames end in `code_generation_summarization_results.json`
++or `code_generation_pseudocode_results.json`. Existing analysis accepts both.
++Use `--metrics "ASL_pow,pass@1,pass_drop"` to analyze without a similarity judge;
++the supplied data package's `aslScore` corresponds to `ASL_pow`.
++
++Changes to the existing framework: `evaloop/tasks/__init__.py` registers the new
++task, `evaloop/core/config.py` selects it, `evaloop/cli.py` exposes `--loop_type`,
++and `evaloop/core/evaluator.py` labels and saves each configuration separately.
++The cycle runner, functional tests, generation prompt, and scoring formulas
++are unchanged. The extension changes both structure and requested detail, so
++an observed difference cannot be attributed to structure alone.
++
++Offline checks: `python -m pytest tests/test_pseudocode.py tests/test_openrouter.py`.
++These use simulated model responses and test outcomes. They establish loop
++wiring and stopping behavior, not robustness results from evaluated models.
++
+ ## 🔄 How the Loop Works
+ 
+ Each evaluation cycle alternates between two tasks:
+diff --git a/analyze_hw4.py b/analyze_hw4.py
+new file mode 100644
+index 0000000..848c997
+--- /dev/null
++++ b/analyze_hw4.py
+@@ -0,0 +1,173 @@
++"""Reproduce HW4 metrics, matched-task comparisons, plots, and audit evidence.
++
++Reads saved results only. Never calls an API or executes generated code.
++"""
++
++import argparse
++import csv
++import json
++from pathlib import Path
++
++
++MODELS = {
++    "meta-llama/llama-3.1-8b-instruct": "llama-3.1-8b-instruct",
++    "qwen/qwen3.7-flash": "qwen3.7-flash",
++}
++LOOPS = ("standard", "pseudocode")
++
++
++def write_csv(path, rows, fields):
++    with path.open("w", newline="") as output:
++        writer = csv.DictWriter(output, fieldnames=fields)
++        writer.writeheader()
++        writer.writerows(rows)
++
++
++def load_runs(directory):
++    runs = {}
++    task_ids = None
++    for model, short in MODELS.items():
++        for loop in LOOPS:
++            suffix = "summarization" if loop == "standard" else "pseudocode"
++            name = f"{short}_{loop}_code_generation_{suffix}_results.json"
++            matches = list(directory.rglob(name))
++            if len(matches) != 1:
++                raise ValueError(f"Expected exactly one {name}; found {len(matches)}")
++            (data,) = json.loads(matches[0].read_text())
++            if data["loop_type"] != loop or data["max_cycles"] != 10:
++                raise ValueError(f"Wrong loop or cycle limit in {name}")
++            tasks = {task["task_id"]: task for task in data["prompt_results"]}
++            if len(tasks) != 378 or (task_ids is not None and set(tasks) != task_ids):
++                raise ValueError("All four runs must contain the same 378 tasks")
++            task_ids = set(tasks)
++            for task in tasks.values():
++                sustained = task["successful_cycles"]
++                assert 0 <= sustained <= 10
++                assert len(task["cycles"]) == min(sustained + 1, 10)
++                assert task["max_cycles_reached"] == (sustained == 10)
++                assertion = task["initial_prompt"].splitlines()[-2]
++                for cycle_number, cycle in enumerate(task["cycles"], 1):
++                    assert cycle["cycle"] == cycle_number
++                    assert cycle["success"] == (cycle_number <= sustained)
++                    assert cycle["test_results"]["success"] == cycle["success"]
++                    assert cycle["task_2_output"].splitlines()[-2] == assertion
++                    assert not any(key.endswith("_error") for key in cycle)
++            if model.startswith("qwen/"):
++                assert data["reasoning_enabled"] is False
++            runs[model, loop] = tasks
++    return runs
++
++
++def audit_cases(runs, annotations, output):
++    rows = []
++    evidence = [
++        "# Failure inspection evidence",
++        "AI-assisted static code-reading worksheet. The author must review the labels.",
++        "The sample is purposive, not a random estimate of failure prevalence.",
++        "Cycle 1 cases are initial coding failures, not evidence of loop-induced drift.",
++    ]
++    for case in annotations:
++        task = runs[case["model"], case["loop"]][case["task_id"]]
++        failed = task["cycles"][-1]
++        assert failed["success"] is False
++        previous = task["cycles"][-2] if len(task["cycles"]) > 1 else None
++        row = {
++            **case,
++            "failed_cycle": failed["cycle"],
++            "base_passed": failed["test_results"]["base_success"],
++            "plus_passed": failed["test_results"]["plus_success"],
++        }
++        rows.append(row)
++        evidence.extend([
++            f"\n## {len(rows)}. {case['model']} / {case['loop']} / {case['task_id']} / cycle {failed['cycle']}",
++            f"Category: {case['category']}. Confidence: {case['confidence']}.",
++            f"Observation: {case['observation']}",
++            f"Interpretation: {case['interpretation']}",
++            f"Base passed: {row['base_passed']}; plus passed: {row['plus_passed']}.",
++            "\nOriginal task:\n```text\n" + task["initial_prompt"].rstrip() + "\n```",
++        ])
++        if previous:
++            evidence.extend([
++                "\nLast passing code:\n```python\n" + previous["task_1_output"] + "\n```",
++                "\nDescription fed into failure:\n```text\n" + previous["task_2_output"].rstrip() + "\n```",
++            ])
++        else:
++            evidence.append("No earlier cycle: this is an initial coding failure.")
++        evidence.append("\nFailing code:\n```python\n" + failed["task_1_output"] + "\n```")
++    write_csv(output / "failure_review.csv", rows, list(rows[0]))
++    (output / "failure_review.md").write_text("\n\n".join(evidence) + "\n")
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--results-dir", type=Path, required=True)
++    parser.add_argument("--output-dir", type=Path, required=True)
++    parser.add_argument("--annotations", type=Path)
++    args = parser.parse_args()
++    args.output_dir.mkdir(parents=True, exist_ok=True)
++    runs = load_runs(args.results_dir)
++    metrics, summary, survival_rows, paired = [], [], [], []
++    for (model, loop), tasks in runs.items():
++        counts = [task["successful_cycles"] for task in tasks.values()]
++        survival = [sum(count >= cycle for count in counts) for cycle in range(1, 11)]
++        numerator = sum(count * count for count in counts)
++        summary.append({
++            "model": model, "configuration": f"{loop}-mbpp-plus", "n_tasks": 378,
++            "success_rate": survival[0] / 378, "asl_score": numerator / 3780,
++        })
++        metrics.append({
++            **summary[-1], "survival_counts": survival,
++            "retention": survival[-1] / survival[0],
++            "conditional_asl": numerator / (survival[0] * 10),
++            "initial_failures": counts.count(0),
++            "later_failures": sum(0 < count < 10 for count in counts),
++        })
++        for cycle, surviving in enumerate(survival, 1):
++            survival_rows.append({"model": model, "loop": loop, "cycle": cycle,
++                                  "surviving_tasks": surviving, "pass_rate": surviving / 378})
++    for model in MODELS:
++        standard, pseudocode = runs[model, "standard"], runs[model, "pseudocode"]
++        common = [task_id for task_id in standard if
++                  standard[task_id]["successful_cycles"] > 0 and
++                  pseudocode[task_id]["successful_cycles"] > 0]
++        deltas = [pseudocode[task_id]["successful_cycles"] -
++                  standard[task_id]["successful_cycles"] for task_id in common]
++        paired.append({"model": model, "shared_initially_solved": len(common),
++                       "pseudocode_better": sum(delta > 0 for delta in deltas),
++                       "tie": deltas.count(0), "pseudocode_worse": sum(delta < 0 for delta in deltas),
++                       "mean_survival_change": sum(deltas) / len(deltas)})
++    for name, rows in [("summary.csv", summary), ("survival.csv", survival_rows),
++                       ("paired_comparison.csv", paired)]:
++        write_csv(args.output_dir / name, rows, list(rows[0]))
++    (args.output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
++
++    import matplotlib
++    matplotlib.use("Agg")
++    import matplotlib.pyplot as plt
++
++    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.5), sharey=True)
++    for axis, model in zip(axes, MODELS):
++        for loop, color in [("standard", "#0072B2"), ("pseudocode", "#D55E00")]:
++            values = next(row["survival_counts"] for row in metrics if
++                          row["model"] == model and row["configuration"] == f"{loop}-mbpp-plus")
++            axis.plot(range(1, 11), [100 * value / 378 for value in values],
++                      marker="o", markersize=3, label=loop, color=color)
++        axis.set_title("Llama 3.1 8B" if model.startswith("meta-llama") else "Qwen3.7 Flash")
++        axis.set_xlabel("Cycle")
++        axis.set_xticks(range(1, 11))
++        axis.set_ylim(0, 100)
++        axis.grid(alpha=0.2)
++        axis.legend(fontsize=8)
++    axes[0].set_ylabel("Tasks still passing (%)")
++    fig.tight_layout()
++    for extension in ("png", "pdf"):
++        fig.savefig(args.output_dir / f"survival_comparison.{extension}", dpi=240)
++    plt.close(fig)
++    if args.annotations:
++        annotations = json.loads(args.annotations.read_text())
++        audit_cases(runs, annotations, args.output_dir)
++    print(f"Reproduced all four runs in {args.output_dir}; no API calls or code execution.")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/compose.yaml b/compose.yaml
+new file mode 100644
+index 0000000..c17d5d9
+--- /dev/null
++++ b/compose.yaml
+@@ -0,0 +1,15 @@
++services:
++  benchmark:
++    build: .
++    image: hw4-eval
++    env_file:
++      - ../.env
++    volumes:
++      - ./results:/results
++    cap_drop:
++      - ALL
++    security_opt:
++      - no-new-privileges:true
++    pids_limit: 256
++    cpus: 4
++    mem_limit: 4g
+diff --git a/constraints-hw4.txt b/constraints-hw4.txt
+new file mode 100644
+index 0000000..b4194aa
+--- /dev/null
++++ b/constraints-hw4.txt
+@@ -0,0 +1,97 @@
++# API experiment dependency versions, captured from the completed evaluation image.
++aiohappyeyeballs==2.7.1
++aiohttp==3.14.5
++aiosignal==1.4.0
++annotated-doc==0.0.5
++annotated-types==0.8.0
++anthropic==2.3.0
++anyio==4.15.1
++appdirs==1.4.4
++attrs==26.1.0
++certifi==2026.10.23
++cffi==2.1.1
++charset-normalizer==3.5.2
++click==8.5.0
++contourpy==1.3.3
++cryptography==50.0.2
++cycler==0.12.1
++datasets==5.1.0
++dill==0.4.1
++docstring_parser==0.18.0
++evalplus==0.3.1
++filelock==4.2.4
++fire==0.7.1
++fonttools==4.68.0
++frozenlist==1.8.0
++fsspec==2026.7.0
++google-ai-generativelanguage==0.6.15
++google-api-core==2.33.0
++google-api-python-client==2.201.0
++google-auth==2.62.0
++google-auth-httplib2==0.4.4
++google-generativeai==0.8.6
++googleapis-common-protos==1.75.0
++grpcio==1.85.0
++grpcio-status==1.71.2
++h11==0.16.0
++hf-xet==1.7.1
++httpcore2==2.16.0
++httplib2==0.32.1
++httpx2==2.16.0
++huggingface_hub==2.3.0
++idna==3.20
++jiter==0.18.0
++kiwisolver==1.5.1
++markdown-it-py==4.2.0
++matplotlib==3.11.2
++mdurl==0.1.2
++multidict==7.2.1
++multipledispatch==1.0.0
++multiprocess==0.70.19
++numpy==2.4.6
++openai==3.41.0
++opentelemetry-api==1.45.1
++packaging==26.3
++pandas==3.1.0
++pillow==13.0.0
++propcache==0.5.4
++proto-plus==1.28.2
++protobuf==5.29.6
++psutil==7.2.2
++pyarrow==26.0.0
++pyasn1==0.6.5
++pyasn1_modules==0.4.2
++pycparser==3.12
++pydantic==2.14.1
++pydantic_core==2.50.1
++Pygments==2.21.0
++pyparsing==3.3.3
++python-dateutil==3.0.0
++python-dotenv==1.2.4
++PyYAML==6.0.3
++regex==2026.9.29
++requests==2.34.2
++rich==15.0.0
++safetensors==0.8.0
++seaborn==0.13.2
++shellingham==1.5.4
++six==1.17.0
++sniffio==1.3.1
++stop-sequencer==1.2.3
++tempdir==0.7.1
++termcolor==3.3.0
++tokenizers==0.23.3
++tqdm==4.70.1
++transformers==5.21.0
++tree-sitter==0.26.0
++tree-sitter-python==0.25.0
++truststore==0.10.5
++typer==0.27.3
++typing-inspection==0.4.4
++typing_extensions==4.16.0
++tzdata==2026.6
++uritemplate==4.2.0
++urllib3==2.8.0
++wget==3.2
++xxhash==4.0.2
++yarl==1.25.1
+diff --git a/evaloop/cli.py b/evaloop/cli.py
+index 7f2bb4f..aff3446 100644
+--- a/evaloop/cli.py
++++ b/evaloop/cli.py
+@@ -92,6 +92,11 @@ class EvaLoopCLI:
+         preferred_batch_size: int = 64,
+         is_chat_model: bool = True,
+         system_prompt: str = "You are a helpful programming assistant.",
++        provider: str = "auto",
++        env_file: Optional[str] = None,
++        loop_type: str = "standard",
++        api_concurrency: int = 1,
++        reasoning_enabled: Optional[bool] = None,
+     ) -> Dict[str, Any]:
+         """
+         Run code generation and summarization evaluation experiment.
+@@ -114,6 +119,11 @@ class EvaLoopCLI:
+             log_level: Logging level (DEBUG, INFO, WARNING, ERROR).
+             experiment_name: Name for the experiment (auto-generated if None).
+             openai_api_key: OpenAI API key (can also be set via OPENAI_API_KEY env var).
++            provider: 'auto' for existing model detection, or 'openrouter' for hosted models.
++            env_file: Optional .env path. OpenRouter otherwise searches the working directory and parents.
++            loop_type: 'standard' for prose summaries, or 'pseudocode' for structured pseudocode.
++            api_concurrency: Maximum simultaneous API requests per model (default 1).
++            reasoning_enabled: Optional OpenRouter reasoning switch; omitted by default.
+             gpu_ids: Comma-separated GPU IDs for VLLM models (e.g., "0,1,2,3").
+             tensor_parallel_size: Number of GPUs for tensor parallelism.
+             gpu_memory_utilization: GPU memory utilization ratio for VLLM.
+@@ -203,6 +213,11 @@ class EvaLoopCLI:
+             is_chat_model=is_chat_model,
+             system_prompt=system_prompt,
+             openai_api_key=openai_api_key,
++            provider=provider,
++            env_file=env_file,
++            loop_type=loop_type,
++            api_concurrency=api_concurrency,
++            reasoning_enabled=reasoning_enabled,
+         )
+         # Log model type detection results
+         model_config = config.get_model_config()
+diff --git a/evaloop/core/config.py b/evaloop/core/config.py
+index 3ad780a..2f75892 100644
+--- a/evaloop/core/config.py
++++ b/evaloop/core/config.py
+@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
+ from typing import List, Optional, Dict, Any
+ from pathlib import Path
+ 
++from dotenv import find_dotenv, load_dotenv
+ 
+ @dataclass
+ class EvaluationConfig:
+@@ -50,11 +51,40 @@ class EvaluationConfig:
+     
+     # API configuration
+     openai_api_key: Optional[str] = None
++    provider: str = "auto"
++    env_file: Optional[str] = None
++    loop_type: str = "standard"
++    api_concurrency: int = 1
++    reasoning_enabled: Optional[bool] = None
+     
+     def __post_init__(self):
+         """Validate configuration after initialization."""
+         if not self.model:
+             raise ValueError("A model must be specified")
++
++        if type(self.api_concurrency) is not int or self.api_concurrency < 1:
++            raise ValueError("api_concurrency must be a positive integer")
++
++        if self.loop_type not in {"standard", "pseudocode"}:
++            raise ValueError("loop_type must be 'standard' or 'pseudocode'")
++
++        if self.provider not in {"auto", "openrouter"}:
++            raise ValueError("provider must be 'auto' or 'openrouter'")
++        if self.reasoning_enabled is not None:
++            if type(self.reasoning_enabled) is not bool or self.provider != "openrouter":
++                raise ValueError("reasoning_enabled requires a boolean and provider='openrouter'")
++        if self.env_file is not None:
++            if not Path(self.env_file).is_file():
++                raise ValueError(f"Environment file not found: {self.env_file}")
++            load_dotenv(self.env_file, override=False)
++        elif self.provider == "openrouter":
++            # Search from the working directory, including its parents (e.g. HW4/.env).
++            load_dotenv(find_dotenv(usecwd=True), override=False)
++
++        if self.provider == "openrouter" and not self.openai_api_key:
++            self.openai_api_key = os.environ.get("OPENROUTER_API_KEY")
++            if not self.openai_api_key:
++                raise ValueError("OpenRouter requires OPENROUTER_API_KEY in the environment or .env")
+         
+         if self.max_cycles <= 0:
+             raise ValueError("max_cycles must be positive")
+@@ -107,6 +137,10 @@ class EvaluationConfig:
+         """Convert configuration to dictionary."""
+         return {
+             "model": self.model,
++            "provider": self.provider,
++            "loop_type": self.loop_type,
++            "api_concurrency": self.api_concurrency,
++            "reasoning_enabled": self.reasoning_enabled,
+             "dataset": self.dataset,
+             "languages": self.languages,
+             "max_cycles": self.max_cycles,
+@@ -129,7 +163,9 @@ class EvaluationConfig:
+     def _create_model_config(self, model: str) -> Dict[str, Any]:
+         """Create configuration for a specific model."""
+         # Determine model type based on model name/path
+-        if any(provider in model.lower() for provider in ["gpt", "chatgpt", "openai"]):
++        if self.provider == "openrouter":
++            model_type = "openai"
++        elif any(provider in model.lower() for provider in ["gpt", "chatgpt", "openai"]):
+             model_type = "openai"
+         elif "claude" in model.lower():
+             model_type = "anthropic"
+@@ -155,7 +191,15 @@ class EvaluationConfig:
+                 "model_id": model,
+                 "api_key": self.openai_api_key,
+                 "max_tokens": self.max_model_len,
++                "api_concurrency": self.api_concurrency,
+             })
++            if self.provider == "openrouter":
++                base_config.update({
++                    "base_url": "https://openrouter.ai/api/v1",
++                    "max_tokens": self.max_new_tokens,
++                    "system_prompt": self.system_prompt,
++                    "reasoning_enabled": self.reasoning_enabled,
++                })
+         elif model_type == "anthropic":
+             base_config.update({
+                 "model_id": model,
+@@ -405,7 +449,7 @@ class EvaluationConfig:
+     def get_task_configs(self, task_type: str = "code_generation_summarization") -> List[Dict[str, Any]]:
+         """Generate task configurations based on task type."""
+         if task_type == "code_generation_summarization":
+-            return [
++            tasks = [
+                 {
+                     "type": "code_generation",
+                     "language": "python",
+@@ -416,8 +460,11 @@ class EvaluationConfig:
+                     "prompt_template": "Use one sentence to summarize the following code and start with 'write a python function to':\n\n```\n{code}\n```\n\n```\nwrite a python function to\n```",
+                 },
+             ]
++            if self.loop_type == "pseudocode":
++                tasks[1] = {"type": "code_to_pseudocode"}
++            return tasks
+         elif task_type == "code_translation":
+             # Code translation is not currently supported but kept as interface
+             raise NotImplementedError("Code translation is not currently supported")
+         else:
+-            raise ValueError(f"Unsupported task type: {task_type}. Currently only 'code_generation_summarization' is supported.")
+\ No newline at end of file
++            raise ValueError(f"Unsupported task type: {task_type}. Currently only 'code_generation_summarization' is supported.")
+diff --git a/evaloop/core/evaluator.py b/evaloop/core/evaluator.py
+index 64587ee..d71981d 100644
+--- a/evaloop/core/evaluator.py
++++ b/evaloop/core/evaluator.py
+@@ -41,7 +41,7 @@ class EvaLoopEvaluator:
+         Returns:
+             List of evaluation results (single model result in list for consistency).
+         """
+-        self.logger.info("Starting code generation and summarization evaluation")
++        self.logger.info(f"Starting {self.config.loop_type} evaluation")
+         
+         # Setup components
+         model = self._create_model()
+@@ -53,7 +53,11 @@ class EvaLoopEvaluator:
+         model_result = self._run_evaluation_cycles(model, tasks, prompts, py_problems, tester)
+         
+         # Save and return results
+-        self._save_results([model_result], "code_generation_summarization")
++        experiment_type = (
++            "code_generation_pseudocode" if self.config.loop_type == "pseudocode"
++            else "code_generation_summarization"
++        )
++        self._save_results([model_result], experiment_type)
+         return [model_result]
+     
+     def run_code_translation(self) -> Dict[str, Any]:
+@@ -142,6 +146,8 @@ class EvaLoopEvaluator:
+         """Initialize the model result structure."""
+         model_result = {
+             "model": str(model),
++            "loop_type": self.config.loop_type,
++            "reasoning_enabled": self.config.reasoning_enabled,
+             # Loop budget M; needed by the analyzer to normalize the ASL metrics
+             "max_cycles": self.config.max_cycles,
+             "prompt_results": []
+diff --git a/evaloop/models/closed_source.py b/evaloop/models/closed_source.py
+index 9657386..cff89c4 100644
+--- a/evaloop/models/closed_source.py
++++ b/evaloop/models/closed_source.py
+@@ -3,6 +3,7 @@ from openai import OpenAI
+ from typing import Any, Dict, List
+ import logging
+ import time
++from concurrent.futures import ThreadPoolExecutor
+ 
+ from .base import BaseLLM
+ 
+@@ -65,6 +66,9 @@ class OpenAILLM(BaseLLM):
+ 
+     def __init__(self, model_config: Dict[str, Any]):
+         super().__init__(model_config)
++        self.api_concurrency = model_config.get("api_concurrency", 1)
++        if type(self.api_concurrency) is not int or self.api_concurrency < 1:
++            raise ValueError("api_concurrency must be a positive integer")
+         self.api_key = model_config.get("api_key")
+         self.model_id = model_config.get("model_id", "gpt-3.5-turbo")
+         self.max_tokens = model_config.get("max_tokens", 4096)
+@@ -76,6 +80,7 @@ class OpenAILLM(BaseLLM):
+         # Set default to greedy decoding
+         self.temperature = model_config.get("temperature", 0.0)  # 0.0 = greedy decoding
+         self.top_p = model_config.get("top_p", 1.0)  # 1.0 = no nucleus sampling
++        self.reasoning_enabled = model_config.get("reasoning_enabled")
+ 
+         # Hardcoded retry parameters
+         self.max_retries = 10  # Maximum number of retry attempts
+@@ -84,6 +89,15 @@ class OpenAILLM(BaseLLM):
+         # Create client in init to avoid recreating for each request
+         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+ 
++    def batch_generate(self, prompts: List[str], **kwargs) -> List[str]:
++        """Send independent requests concurrently, retaining input order.
++
++        Each worker uses generate(), including its existing per-request retry
++        and error handling. The limit applies to this model's current batch.
++        """
++        with ThreadPoolExecutor(max_workers=self.api_concurrency) as pool:
++            return list(pool.map(lambda prompt: self.generate(prompt, **kwargs), prompts))
++
+     def _build_messages(self, prompt: str, include_system: bool) -> List[Dict[str, str]]:
+         """
+         Build the chat messages for a request.
+@@ -133,6 +147,10 @@ class OpenAILLM(BaseLLM):
+         # Filter out parameters that are explicitly handled
+         filtered_kwargs = {k: v for k, v in kwargs.items() 
+                          if k not in ["max_tokens", "temperature", "top_p", "model_id"]}
++        if self.reasoning_enabled is not None:
++            extra_body = dict(filtered_kwargs.get("extra_body") or {})
++            extra_body["reasoning"] = {"enabled": self.reasoning_enabled}
++            filtered_kwargs["extra_body"] = extra_body
+         
+         # Initialize logger
+         logger = logging.getLogger(__name__)
+@@ -254,4 +272,4 @@ class OpenAILLM(BaseLLM):
+         
+         # If all retry attempts have been exhausted
+         logger.error(f"All retry attempts exhausted, last error: {str(last_error)}")
+-        return f"Error generating response after maximum retries: {str(last_error)}"
+\ No newline at end of file
++        return f"Error generating response after maximum retries: {str(last_error)}"
+diff --git a/evaloop/models/factory.py b/evaloop/models/factory.py
+index 1061582..8b62321 100644
+--- a/evaloop/models/factory.py
++++ b/evaloop/models/factory.py
+@@ -4,9 +4,6 @@ import logging
+ from typing import Dict, Any
+ 
+ from .base import BaseLLM
+-from .open_source import HuggingFaceLLM
+-from .open_source_vllm import VllmLLM
+-from .closed_source import OpenAILLM
+ 
+ 
+ class ModelFactory:
+@@ -43,10 +40,16 @@ class ModelFactory:
+         self.logger.debug(f"Creating model with config: {sanitized_config}")
+         
+         if model_type in ["llama", "deepseek", "huggingface", "open_source"]:
++            from .open_source import HuggingFaceLLM
++
+             return HuggingFaceLLM(model_config)
+         elif model_type in ["vllm"]:
++            from .open_source_vllm import VllmLLM
++
+             return VllmLLM(model_config)
+         elif model_type in ["openai", "chatgpt", "closed_source"]:
++            from .closed_source import OpenAILLM
++
+             return OpenAILLM(model_config)
+         else:
+             raise ValueError(f"Unsupported model type: {model_type}")
+diff --git a/evaloop/tasks/__init__.py b/evaloop/tasks/__init__.py
+index 66200cb..cbdd8ab 100644
+--- a/evaloop/tasks/__init__.py
++++ b/evaloop/tasks/__init__.py
+@@ -9,6 +9,7 @@ from .base import BaseTask
+ from .factory import TaskFactory, register_task
+ from .code_generation import CodeGenerationTask
+ from .code_summarization import CodeSummarizationTask
++from .code_to_pseudocode import CodeToPseudocodeTask
+ from .code_translation import CodeTranslationTask
+ 
+ __all__ = [
+@@ -17,5 +18,6 @@ __all__ = [
+     "register_task",
+     "CodeGenerationTask",
+     "CodeSummarizationTask",
++    "CodeToPseudocodeTask",
+     "CodeTranslationTask",
+ ]
+diff --git a/evaloop/tasks/code_to_pseudocode.py b/evaloop/tasks/code_to_pseudocode.py
+new file mode 100644
+index 0000000..09199f5
+--- /dev/null
++++ b/evaloop/tasks/code_to_pseudocode.py
+@@ -0,0 +1,33 @@
++"""Code-to-pseudocode step for the self-consistency loop."""
++
++from .code_summarization import CodeSummarizationTask
++from .factory import register_task
++
++
++PSEUDOCODE_PROMPT = """Convert the following Python code into structured pseudocode.
++
++Describe its actual behavior.
++Preserve function names, parameters, return values, conditions,
++loops, and edge cases.
++Use FUNCTION, INPUTS, OUTPUT, STEPS, and END FUNCTION.
++Use plain English for the steps.
++Do not copy Python statements or add explanations outside the pseudocode.
++
++```python
++{code}
++```
++"""
++
++
++@register_task("code_to_pseudocode")
++class CodeToPseudocodeTask(CodeSummarizationTask):
++    """Use pseudocode in place of prose, with the standard assertion wrapper.
++
++    Inherited extraction strips surrounding whitespace without repairing the
++    model's response. Inherited postprocessing carries the original assertion
++    forward, exactly as in the standard loop.
++    """
++
++    def create_prompt(self, input_text: str) -> str:
++        template = self.task_config.get("prompt_template", PSEUDOCODE_PROMPT)
++        return template.format(code=input_text)
+diff --git a/pyproject.toml b/pyproject.toml
+index a5a7901..54ed6e5 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -38,6 +38,7 @@ dependencies = [
+     "transformers>=4.30.0", 
+     "fire>=0.5.0",
+     "openai>=1.0.0",
++    "python-dotenv>=1.0.0",
+     "pyyaml>=6.0",
+     "pandas>=2.0.0",
+     "matplotlib>=3.7.0",
+diff --git a/requirements.txt b/requirements.txt
+index e291af2..0bee24b 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -2,6 +2,7 @@ torch>=2.0.0
+ transformers>=4.30.0
+ fire>=0.5.0
+ openai>=1.0.0
++python-dotenv>=1.0.0
+ pyyaml>=6.0
+ pandas>=2.0.0
+ matplotlib>=3.7.0
+diff --git a/run_hw4.py b/run_hw4.py
+new file mode 100644
+index 0000000..5b38497
+--- /dev/null
++++ b/run_hw4.py
+@@ -0,0 +1,75 @@
++"""Run the four HW4 configurations inside the evaluation container."""
++
++import argparse
++import csv
++from pathlib import Path
++
++
++MODELS = ("meta-llama/llama-3.1-8b-instruct", "qwen/qwen3.7-flash")
++LOOPS = ("standard", "pseudocode")
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--check", action="store_true", help="Check imports without API calls.")
++    parser.add_argument("--output-dir", type=Path, default=Path("/results"))
++    parser.add_argument("--models", nargs="+", choices=MODELS, default=list(MODELS))
++    parser.add_argument("--loops", nargs="+", choices=LOOPS, default=list(LOOPS))
++    args = parser.parse_args()
++
++    from evaloop.analysis.analyzer import ResultAnalyzer
++    from evaloop.core.config import EvaluationConfig
++    from evaloop.core.evaluator import EvaLoopEvaluator
++    from evaloop.utils.logging_utils import setup_logging
++
++    if args.check:
++        print("API, evaluator, and analysis imports passed. No API calls made.")
++        return
++
++    output = args.output_dir
++    output.mkdir(parents=True, exist_ok=True)
++    if list(output.glob("*_results.json")) or (output / "summary.csv").exists():
++        parser.error("Results already exist. Select an empty directory with --output-dir.")
++
++    # Validate every configuration before starting the first paid run.
++    configs = [
++        EvaluationConfig(
++            model=model, provider="openrouter", loop_type=loop,
++            api_concurrency=4, temperature=0, top_p=1, max_cycles=10,
++            max_new_tokens=1024, output_dir=str(output),
++            reasoning_enabled=False if model == "qwen/qwen3.7-flash" else None,
++            experiment_name=f"{model.split('/')[-1]}_{loop}",
++        )
++        for model in args.models for loop in args.loops
++    ]
++    fields = ["model", "configuration", "n_tasks", "success_rate", "asl_score"]
++    with (output / "summary.csv").open("w", newline="") as summary:
++        writer = csv.DictWriter(summary, fieldnames=fields)
++        writer.writeheader()
++        summary.flush()
++        for config in configs:
++            logger = setup_logging(
++                log_dir=str(output / "logs"), log_file=f"{config.experiment_name}.log"
++            )
++            logger.info("Starting %s on the full MBPP Plus dataset", config.experiment_name)
++            results = EvaLoopEvaluator(config).run_code_generation_summarization()
++            suffix = "pseudocode" if config.loop_type == "pseudocode" else "summarization"
++            result_file = output / f"{config.experiment_name}_code_generation_{suffix}_results.json"
++            analysis = ResultAnalyzer(
++                results_path=str(result_file),
++                output_dir=str(output / "analysis" / config.experiment_name),
++            ).analyze(metrics=["ASL_pow", "pass@1", "pass_drop"])
++            model_name = results[0]["model"]
++            writer.writerow({
++                "model": config.model,
++                "configuration": f"{config.loop_type}-mbpp-plus",
++                "n_tasks": len(results[0]["prompt_results"]),
++                "success_rate": analysis["pass@1"]["by_model"][model_name],
++                "asl_score": analysis["ASL_pow"]["by_model"][model_name],
++            })
++            summary.flush()
++            logger.info("Finished %s", config.experiment_name)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/test_api_concurrency.py b/tests/test_api_concurrency.py
+new file mode 100644
+index 0000000..e053d90
+--- /dev/null
++++ b/tests/test_api_concurrency.py
+@@ -0,0 +1,81 @@
++"""Parallel API behavior, checked without network requests."""
++
++import sys
++from threading import Barrier, Event, Lock
++from types import SimpleNamespace
++
++import pytest
++
++from evaloop.core.config import EvaluationConfig
++from evaloop.models import closed_source
++
++
++def make_model(monkeypatch, complete, concurrency=2):
++    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete)))
++    monkeypatch.setattr(closed_source, "OpenAI", lambda **kwargs: client)
++    return closed_source.OpenAILLM({"api_concurrency": concurrency})
++
++
++def test_parallel_requests_are_bounded_and_results_keep_input_order(monkeypatch):
++    barrier, second_finished, lock = Barrier(2, timeout=5), Event(), Lock()
++    active, peak = 0, 0
++    finished = []
++
++    def complete(**kwargs):
++        nonlocal active, peak
++        prompt = kwargs["messages"][-1]["content"]
++        with lock:
++            active += 1
++            peak = max(peak, active)
++        try:
++            barrier.wait()
++            if prompt == "0":
++                assert second_finished.wait(timeout=5)
++            with lock:
++                finished.append(prompt)
++            if prompt == "1":
++                second_finished.set()
++            return SimpleNamespace(
++                choices=[SimpleNamespace(message=SimpleNamespace(content=prompt))]
++            )
++        finally:
++            with lock:
++                active -= 1
++
++    model = make_model(monkeypatch, complete)
++    prompts = [str(i) for i in range(8)]
++    assert model.batch_generate(prompts) == prompts
++    assert peak == 2
++    assert finished.index("1") < finished.index("0")
++
++
++def test_one_request_error_does_not_discard_other_responses(monkeypatch):
++    def complete(**kwargs):
++        prompt = kwargs["messages"][-1]["content"]
++        if prompt == "bad":
++            raise RuntimeError("simulated request failure")
++        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=prompt))])
++
++    model = make_model(monkeypatch, complete)
++    good, bad, other = model.batch_generate(["good", "bad", "other"])
++    assert good == "good" and other == "other"
++    assert "simulated request failure" in bad
++    assert model.batch_generate([]) == []
++
++
++@pytest.mark.parametrize("value", [0, -1, 1.5, True])
++def test_invalid_concurrency_fails_before_creating_client(tmp_path, value):
++    with pytest.raises(ValueError, match="api_concurrency"):
++        EvaluationConfig(model="gpt-example", output_dir=str(tmp_path), api_concurrency=value)
++    with pytest.raises(ValueError, match="api_concurrency"):
++        closed_source.OpenAILLM({"api_concurrency": value})
++
++
++def test_api_factory_does_not_import_local_model_dependencies(monkeypatch):
++    monkeypatch.setitem(sys.modules, "evaloop.models.open_source", None)
++    monkeypatch.setitem(sys.modules, "evaloop.models.open_source_vllm", None)
++    from evaloop.models.factory import ModelFactory
++
++    monkeypatch.setattr(closed_source, "OpenAI", lambda **kwargs: object())
++    model = ModelFactory().create_model({"type": "openai", "api_concurrency": 4})
++    assert model.api_concurrency == 4
+diff --git a/tests/test_hw4_runner.py b/tests/test_hw4_runner.py
+new file mode 100644
+index 0000000..8917176
+--- /dev/null
++++ b/tests/test_hw4_runner.py
+@@ -0,0 +1,80 @@
++"""Check the four-run launcher without API requests or generated-code execution."""
++
++import csv
++import importlib.util
++from pathlib import Path
++import sys
++from types import SimpleNamespace
++
++import pytest
++
++
++@pytest.fixture
++def runner(monkeypatch):
++    calls = []
++
++    class Evaluator:
++        def __init__(self, config):
++            self.config = config
++
++        def run_code_generation_summarization(self):
++            calls.append(self.config)
++            return [{"model": "offline-model", "prompt_results": [{}, {}]}]
++
++    class Analyzer:
++        def __init__(self, results_path, output_dir):
++            self.path = results_path
++
++        def analyze(self, metrics):
++            assert metrics == ["ASL_pow", "pass@1", "pass_drop"]
++            return {key: {"by_model": {"offline-model": value}} for key, value in
++                    [("ASL_pow", 0.2), ("pass@1", 0.5), ("pass_drop", 0.5)]}
++
++    monkeypatch.setitem(sys.modules, "evaloop.core.evaluator", SimpleNamespace(EvaLoopEvaluator=Evaluator))
++    monkeypatch.setitem(sys.modules, "evaloop.analysis.analyzer", SimpleNamespace(ResultAnalyzer=Analyzer))
++    monkeypatch.setenv("OPENROUTER_API_KEY", "offline-key")
++    source = Path(__file__).parents[1] / "run_hw4.py"
++    spec = importlib.util.spec_from_file_location("hw4_runner", source)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module, calls
++
++
++def test_runs_all_configurations_and_writes_summary(tmp_path, monkeypatch, runner):
++    module, calls = runner
++    monkeypatch.setattr(sys, "argv", ["run_hw4.py", "--output-dir", str(tmp_path)])
++    module.main()
++    assert [(c.model, c.loop_type) for c in calls] == [
++        (model, loop) for model in module.MODELS for loop in module.LOOPS
++    ]
++    assert all(c.api_concurrency == 4 and c.max_cycles == 10 for c in calls)
++    assert all(c.temperature == 0 and c.top_p == 1 and c.max_new_tokens == 1024 for c in calls)
++    assert all(c.reasoning_enabled is False for c in calls if c.model == "qwen/qwen3.7-flash")
++    assert all(c.reasoning_enabled is None for c in calls if c.model.startswith("meta-llama/"))
++    with (tmp_path / "summary.csv").open() as summary:
++        rows = list(csv.DictReader(summary))
++    assert len(rows) == 4
++    assert all(row["success_rate"] == "0.5" and row["asl_score"] == "0.2" for row in rows)
++    with pytest.raises(SystemExit):
++        module.main()
++    assert len(calls) == 4  # Refuse a repeat before any additional paid work.
++
++
++def test_check_mode_does_not_evaluate_or_write_results(tmp_path, monkeypatch, runner):
++    module, calls = runner
++    monkeypatch.setattr(sys, "argv", ["run_hw4.py", "--check", "--output-dir", str(tmp_path)])
++    module.main()
++    assert calls == []
++    assert list(tmp_path.iterdir()) == []
++
++
++def test_selected_configuration_only(tmp_path, monkeypatch, runner):
++    module, calls = runner
++    monkeypatch.setattr(sys, "argv", [
++        "run_hw4.py", "--output-dir", str(tmp_path),
++        "--models", "qwen/qwen3.7-flash", "--loops", "pseudocode",
++    ])
++    module.main()
++    assert [(config.model, config.loop_type) for config in calls] == [
++        ("qwen/qwen3.7-flash", "pseudocode")
++    ]
+diff --git a/tests/test_openrouter.py b/tests/test_openrouter.py
+new file mode 100644
+index 0000000..dcd19e3
+--- /dev/null
++++ b/tests/test_openrouter.py
+@@ -0,0 +1,130 @@
++"""Offline checks for OpenRouter credentials and request routing."""
++
++from types import SimpleNamespace
++import sys
++
++import pytest
++
++from evaloop.core.config import EvaluationConfig
++
++
++@pytest.fixture(autouse=True)
++def isolated_environment(tmp_path, monkeypatch):
++    monkeypatch.chdir(tmp_path)
++    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
++
++
++def test_parent_dotenv_routes_non_openai_model_to_openrouter(tmp_path, monkeypatch):
++    (tmp_path / ".env").write_text("OPENROUTER_API_KEY=test-router-key\n")
++    checkout = tmp_path / "checkout"
++    checkout.mkdir()
++    monkeypatch.chdir(checkout)
++    config = EvaluationConfig(
++        model="qwen/example-model", provider="openrouter", max_new_tokens=512
++    )
++    request_config = config.get_model_config()
++    assert request_config["type"] == "openai"
++    assert request_config["model_id"] == "qwen/example-model"
++    assert request_config["api_key"] == "test-router-key"
++    assert request_config["base_url"] == "https://openrouter.ai/api/v1"
++    assert request_config["max_tokens"] == 512
++    assert config.to_dict()["provider"] == "openrouter"
++    assert "api_key" not in config.to_dict()
++
++
++def test_explicit_dotenv_does_not_override_exported_key(tmp_path, monkeypatch):
++    env_file = tmp_path / "credentials.env"
++    env_file.write_text("OPENROUTER_API_KEY=file-key\n")
++    monkeypatch.setenv("OPENROUTER_API_KEY", "exported-key")
++    config = EvaluationConfig(
++        model="google/example-model", provider="openrouter", env_file=str(env_file)
++    )
++    assert config.get_model_config()["api_key"] == "exported-key"
++
++
++def test_missing_router_key_does_not_fall_back_to_openai_key(tmp_path, monkeypatch):
++    monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
++    env_file = tmp_path / "empty.env"
++    env_file.write_text("")
++    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
++        EvaluationConfig(
++            model="qwen/example-model", provider="openrouter",
++            env_file=str(env_file),
++        )
++
++
++def test_missing_explicit_dotenv_fails(tmp_path):
++    with pytest.raises(ValueError, match="Environment file not found"):
++        EvaluationConfig(model="gpt-example", env_file=str(tmp_path / "missing.env"))
++
++
++def test_default_openai_routing_is_unchanged(monkeypatch):
++    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
++    config = EvaluationConfig(model="gpt-example").get_model_config()
++    assert config["type"] == "openai"
++    assert config["api_key"] == "test-openai-key"
++    assert "base_url" not in config
++
++
++def test_router_settings_reach_client_and_request(monkeypatch):
++    from evaloop.models import closed_source
++
++    calls = {}
++
++    def complete(**kwargs):
++        calls["request"] = kwargs
++        return SimpleNamespace(
++            choices=[SimpleNamespace(message=SimpleNamespace(content="generated code"))]
++        )
++
++    def client(**kwargs):
++        calls["client"] = kwargs
++        return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete)))
++
++    monkeypatch.setattr(closed_source, "OpenAI", client)
++    monkeypatch.setenv("OPENROUTER_API_KEY", "test-router-key")
++    monkeypatch.setenv("OPENAI_BASE_URL", "https://unrelated.example/v1")
++    config = EvaluationConfig(
++        model="qwen/example-model", provider="openrouter", reasoning_enabled=False
++    )
++    model = closed_source.OpenAILLM(config.get_model_config())
++    assert model.generate("Write a function") == "generated code"
++    assert calls["client"] == {
++        "api_key": "test-router-key", "base_url": "https://openrouter.ai/api/v1"
++    }
++    assert calls["request"]["model"] == "qwen/example-model"
++    assert calls["request"]["temperature"] == 0
++    assert calls["request"]["max_tokens"] == 1024
++    assert calls["request"]["extra_body"]["reasoning"] == {"enabled": False}
++
++
++def test_cli_passes_provider_and_environment_file(tmp_path, monkeypatch):
++    from evaloop.cli import EvaLoopCLI
++
++    env_file = tmp_path / "credentials.env"
++    env_file.write_text("OPENROUTER_API_KEY=test-router-key\n")
++    captured = {}
++
++    class OfflineEvaluator:
++        def __init__(self, config):
++            captured["config"] = config.get_model_config()
++            captured["loop_type"] = config.loop_type
++
++        def run_code_generation_summarization(self):
++            return ["offline-result"]
++
++    monkeypatch.setitem(
++        sys.modules, "evaloop.core.evaluator",
++        SimpleNamespace(EvaLoopEvaluator=OfflineEvaluator),
++    )
++    result = EvaLoopCLI().evaluate(
++        model="google/example-model", provider="openrouter", env_file=str(env_file),
++        loop_type="pseudocode",
++        api_concurrency=4,
++    )
++    assert result == ["offline-result"]
++    assert captured["config"]["type"] == "openai"
++    assert captured["config"]["api_key"] == "test-router-key"
++    assert captured["config"]["base_url"] == "https://openrouter.ai/api/v1"
++    assert captured["loop_type"] == "pseudocode"
++    assert captured["config"]["api_concurrency"] == 4
+diff --git a/tests/test_pseudocode.py b/tests/test_pseudocode.py
+new file mode 100644
+index 0000000..317ffeb
+--- /dev/null
++++ b/tests/test_pseudocode.py
+@@ -0,0 +1,124 @@
++"""Offline checks of the pseudocode loop, including stop and save behavior."""
++
++import importlib.util
++import json
++from pathlib import Path
++import sys
++from types import SimpleNamespace
++
++import pytest
++
++from evaloop.core.config import EvaluationConfig
++from evaloop.evaluation.cycle import BatchEvaluationCycle
++from evaloop.tasks import CodeToPseudocodeTask, TaskFactory
++
++from conftest import ASSERT_LINE, MBPP_STYLE_PROMPT
++
++
++CODE = "def similar_elements(a, b):\n    return tuple(set(a) & set(b))"
++PSEUDOCODE = (
++    "FUNCTION similar_elements(a, b)\nINPUTS: two collections\n"
++    "OUTPUT: their shared values\nSTEPS:\n"
++    "  1. Find the values present in both collections.\n"
++    "  2. Return those values as a tuple.\nEND FUNCTION"
++)
++
++
++class RecordingModel:
++    def __init__(self):
++        self.prompts = []
++
++    def generate(self, prompt):
++        self.prompts.append(prompt)
++        if prompt.startswith("Generate Python code"):
++            return f"```python\n{CODE}\n```"
++        return PSEUDOCODE
++
++
++class BatchModel(RecordingModel):
++    def batch_generate(self, prompts):
++        return [self.generate(prompt) for prompt in prompts]
++
++
++def test_first_generation_and_standard_summary_are_unchanged(tmp_path):
++    standard = EvaluationConfig(model="gpt-example", output_dir=str(tmp_path)).get_task_configs()
++    extension = EvaluationConfig(
++        model="gpt-example", output_dir=str(tmp_path), loop_type="pseudocode"
++    ).get_task_configs()
++    assert extension[0] == standard[0]
++    assert standard[1]["type"] == "code_summarization"
++    assert "Use one sentence" in standard[1]["prompt_template"]
++    assert isinstance(TaskFactory().create_task(extension[1]), CodeToPseudocodeTask)
++
++
++def test_invalid_loop_rejected(tmp_path):
++    with pytest.raises(ValueError, match="loop_type"):
++        EvaluationConfig(model="gpt-example", loop_type="typo", output_dir=str(tmp_path))
++
++
++@pytest.mark.parametrize("model_class", [RecordingModel, BatchModel])
++def test_pseudocode_and_original_assertion_feed_next_cycle(tmp_path, model_class):
++    config = EvaluationConfig(model="gpt-example", loop_type="pseudocode", output_dir=str(tmp_path))
++    tasks = [TaskFactory().create_task(task) for task in config.get_task_configs()]
++    model = model_class()
++    runner = BatchEvaluationCycle(model, tasks)
++    prompts = [{"task_id": f"Mbpp/{i}", "prompt": MBPP_STYLE_PROMPT} for i in range(2)]
++    for cycle in (1, 2):
++        results = runner.run_single_cycle(prompts, cycle)["cycle_results"]
++        prompts = []
++        for result in results:
++            assert result["task_1_output"] == CODE
++            wrapped = result["task_2_output"]
++            assert wrapped == f'"""\n{PSEUDOCODE}\n{ASSERT_LINE}\n"""\n'
++            prompts.append({"task_id": result["task_id"], "prompt": wrapped})
++    generation_prompts = [p for p in model.prompts if p.startswith("Generate Python code")]
++    assert PSEUDOCODE in generation_prompts[2]
++    assert "Write a function to find" not in generation_prompts[2]
++    pseudocode_prompts = [p for p in model.prompts if p.startswith("Convert the following")]
++    assert CODE in pseudocode_prompts[0]
++    assert ASSERT_LINE not in pseudocode_prompts[0]
++
++
++@pytest.mark.parametrize("loop_type", ["standard", "pseudocode"])
++@pytest.mark.parametrize("fails_second_cycle", [False, True])
++def test_evaluator_stops_counts_and_saves(tmp_path, monkeypatch, loop_type, fails_second_cycle):
++    # Load the real evaluator with only the external model/data dependencies
++    # replaced. No model requests, dataset downloads, or generated-code execution.
++    monkeypatch.setitem(sys.modules, "evaloop.models.factory", SimpleNamespace(ModelFactory=lambda: None))
++    monkeypatch.setitem(
++        sys.modules, "evaloop.evaluation.py_testing",
++        SimpleNamespace(EvalPlusCodeTester=object, load_mbpp_dataset=lambda: None),
++    )
++    source = Path(__file__).parents[1] / "evaloop/core/evaluator.py"
++    spec = importlib.util.spec_from_file_location("evaloop.core._offline_evaluator", source)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    config = EvaluationConfig(
++        model="gpt-example", loop_type=loop_type, output_dir=str(tmp_path),
++        experiment_name="comparison", max_cycles=10 if fails_second_cycle else 2,
++    )
++    evaluator = module.EvaLoopEvaluator(config)
++    model = RecordingModel()
++    prompts = [{"task_id": "Mbpp/2", "prompt": MBPP_STYLE_PROMPT}]
++    monkeypatch.setattr(evaluator, "_create_model", lambda: model)
++    monkeypatch.setattr(evaluator, "_load_dataset", lambda: (prompts, {"Mbpp/2": {"entry_point": "similar_elements"}}))
++
++    class Tester:
++        calls = 0
++
++        def test_code(self, code, task_id, entry_point):
++            self.calls += 1
++            return {"success": not fails_second_cycle or self.calls == 1, "plus_details": []}
++
++    tester = Tester()
++    monkeypatch.setattr(evaluator, "_create_tester", lambda _: tester)
++    results = evaluator.run_code_generation_summarization()
++    task = results[0]["prompt_results"][0]
++    assert tester.calls == 2
++    assert len(task["cycles"]) == 2
++    assert task["successful_cycles"] == (1 if fails_second_cycle else 2)
++    assert task["max_cycles_reached"] == (not fails_second_cycle)
++    assert results[0]["loop_type"] == loop_type
++    suffix = "pseudocode" if loop_type == "pseudocode" else "summarization"
++    saved = tmp_path / f"comparison_code_generation_{suffix}_results.json"
++    assert json.loads(saved.read_text()) == results

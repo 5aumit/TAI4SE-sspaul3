@@ -1,0 +1,46 @@
+{
+  "upstream_base": "ce22fe2f80c8f36da85cc8a0cca49c2bcc8b1cb9",
+  "published_commit": "ca8388093953dba0c16db608c8b57ad223af20c4",
+  "models": [
+    "meta-llama/llama-3.1-8b-instruct",
+    "qwen/qwen3.7-flash"
+  ],
+  "dataset": "mbpp_plus",
+  "n_tasks": 378,
+  "max_cycles": 10,
+  "temperature": 0,
+  "top_p": 1,
+  "max_new_tokens": 1024,
+  "api_concurrency_per_run": 4,
+  "runs": [
+    {
+      "model": "meta-llama/llama-3.1-8b-instruct",
+      "loop_type": "standard",
+      "duration_seconds": 1791.855,
+      "survived_10": 150,
+      "reasoning_enabled": null
+    },
+    {
+      "model": "meta-llama/llama-3.1-8b-instruct",
+      "loop_type": "pseudocode",
+      "duration_seconds": 3339.772,
+      "survived_10": 171,
+      "reasoning_enabled": null
+    },
+    {
+      "model": "qwen/qwen3.7-flash",
+      "loop_type": "standard",
+      "duration_seconds": 2743.279,
+      "survived_10": 255,
+      "reasoning_enabled": false
+    },
+    {
+      "model": "qwen/qwen3.7-flash",
+      "loop_type": "pseudocode",
+      "duration_seconds": 3337.589,
+      "survived_10": 291,
+      "reasoning_enabled": false
+    }
+  ],
+  "excluded": "Incomplete setup runs, stopped GPT-OSS runs, diagnostics, and supplied course records are excluded."
+}

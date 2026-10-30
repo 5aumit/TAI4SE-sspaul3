@@ -1,0 +1,94 @@
+[
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "configuration": "standard-mbpp-plus",
+    "n_tasks": 378,
+    "success_rate": 0.6164021164021164,
+    "asl_score": 4.337830687830688,
+    "survival_counts": [
+      233,
+      205,
+      192,
+      178,
+      172,
+      164,
+      162,
+      160,
+      155,
+      150
+    ],
+    "retention": 0.6437768240343348,
+    "conditional_asl": 7.037339055793991,
+    "initial_failures": 145,
+    "later_failures": 83
+  },
+  {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "configuration": "pseudocode-mbpp-plus",
+    "n_tasks": 378,
+    "success_rate": 0.6084656084656085,
+    "asl_score": 4.919576719576719,
+    "survival_counts": [
+      230,
+      217,
+      210,
+      205,
+      199,
+      193,
+      184,
+      180,
+      175,
+      171
+    ],
+    "retention": 0.7434782608695653,
+    "conditional_asl": 8.085217391304347,
+    "initial_failures": 148,
+    "later_failures": 59
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "configuration": "standard-mbpp-plus",
+    "n_tasks": 378,
+    "success_rate": 0.7724867724867724,
+    "asl_score": 6.842063492063492,
+    "survival_counts": [
+      292,
+      277,
+      267,
+      264,
+      261,
+      260,
+      256,
+      256,
+      255,
+      255
+    ],
+    "retention": 0.8732876712328768,
+    "conditional_asl": 8.857191780821918,
+    "initial_failures": 86,
+    "later_failures": 37
+  },
+  {
+    "model": "qwen/qwen3.7-flash",
+    "configuration": "pseudocode-mbpp-plus",
+    "n_tasks": 378,
+    "success_rate": 0.7698412698412699,
+    "asl_score": 7.698412698412699,
+    "survival_counts": [
+      291,
+      291,
+      291,
+      291,
+      291,
+      291,
+      291,
+      291,
+      291,
+      291
+    ],
+    "retention": 1.0,
+    "conditional_asl": 10.0,
+    "initial_failures": 87,
+    "later_failures": 0
+  }
+]

@@ -1,0 +1,5 @@
+model,configuration,n_tasks,success_rate,asl_score
+meta-llama/llama-3.1-8b-instruct,standard-mbpp-plus,378,0.6164021164021164,4.337830687830688
+meta-llama/llama-3.1-8b-instruct,pseudocode-mbpp-plus,378,0.6084656084656085,4.919576719576719
+qwen/qwen3.7-flash,standard-mbpp-plus,378,0.7724867724867724,6.842063492063492
+qwen/qwen3.7-flash,pseudocode-mbpp-plus,378,0.7698412698412699,7.698412698412699
